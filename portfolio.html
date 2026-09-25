@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth bg-[#030303]">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Artist & Video Editor Portfolio</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Syncopate:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        display: ['Syncopate', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            400: '#a855f7', // Purple
+                            500: '#8b5cf6', // Violet
+                            600: '#6366f1', // Indigo
+                        }
+                    },
+                    animation: {
+                        'blob': 'blob 10s infinite alternate',
+                        'spin-slow': 'spin 15s linear infinite',
+                    },
+                    keyframes: {
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --cursor-size: 20px;
+        }
+
+        body {
+            background-color: #030303;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        /* Custom Cursor Styling */
+        #cursor {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--cursor-size);
+            height: var(--cursor-size);
+            border-radius: 50%;
+            background-color: theme('colors.brand.500');
+            pointer-events: none;
+            mix-blend-mode: difference;
+            z-index: 9999;
+            transform: translate3d(-50%, -50%, 0);
+            transition: width 0.2s, height 0.2s, background-color 0.2s;
+            will-change: transform, width, height;
+        }
+
+        #cursor.hovered {
+            width: 60px;
+            height: 60px;
+            background-color: white;
+        }
+
+        /* Noise Texture */
+        .noise {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9998;
+            opacity: 0.03;
+            background: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)"/%3E%3C/svg%3E');
+        }
+
+        /* SPA Page Transition Architecture */
+        .page-section {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s ease, visibility 0.5s;
+            padding-top: 120px;
+            /* Offset for header */
+            padding-bottom: 80px;
+            z-index: 1;
+        }
+
+        /* Active page takes up document flow */
+        .page-section.active {
+            position: relative;
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            z-index: 10;
+        }
+
+        /* 3D Tilt Card */
+        .tilt-card {
+            transform-style: preserve-3d;
+            will-change: transform;
+            transition: box-shadow 0.3s ease;
+        }
+
+        .tilt-card-content {
+            transform: translateZ(30px);
+        }
+
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Outlined Text */
+        .text-outline {
+            color: transparent;
+            -webkit-text-stroke: 1px rgba(255, 255, 255, 0.6);
+            transition: 0.3s ease;
+        }
+
+        .text-outline:hover {
+            color: white;
+            -webkit-text-stroke: 1px transparent;
+            text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+        }
+
+        /* Lightbox */
+        #lightbox {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        #lightbox.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .lightbox-scale {
+            transform: scale(0.95);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #lightbox.show .lightbox-scale {
+            transform: scale(1);
+        }
+
+        #mobile-menu-btn {
+            transition: transform 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        #mobile-menu-btn[aria-expanded="true"] {
+            transform: rotate(90deg);
+            background-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(168, 85, 247, 0.6);
+        }
+
+        #lightbox-media video,
+        #lightbox-media iframe {
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            max-height: none;
+            object-fit: contain;
+        }
+
+        #lightbox-media {
+            width: min(100%, 1100px);
+            aspect-ratio: 16 / 9;
+            max-height: 70vh;
+        }
+
+        @media (max-width: 640px) {
+            #lightbox {
+                padding: 1rem 0;
+                overflow-y: auto;
+            }
+
+            .lightbox-scale {
+                padding: 1rem;
+            }
+
+            #lightbox-media {
+                width: 100%;
+                max-height: none;
+            }
+        }
+
+        @media (max-width: 1023px) {
+            #cursor {
+                display: none;
+            }
+
+            .page-section {
+                padding-top: 104px;
+                padding-bottom: 48px;
+            }
+        }
+    </style>
+</head>
+
+<body class="antialiased selection:bg-brand-500 selection:text-white">
+
+    <div class="noise"></div>
+    <div id="cursor"></div>
+
+    <!-- Background Animated Blobs (Ensures no pure black screen) -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div
+            class="absolute -top-40 -left-40 w-[600px] h-[600px] bg-brand-600/20 rounded-full blur-[120px] animate-blob">
+        </div>
+        <div class="absolute top-1/2 -right-40 w-[500px] h-[500px] bg-brand-400/10 rounded-full blur-[100px] animate-blob"
+            style="animation-delay: 2s;"></div>
+    </div>
+
+    <!-- Navigation Header -->
+    <header class="fixed top-0 w-full z-50 px-3 py-3 sm:px-6 sm:py-6 transition-all duration-300" id="header">
+        <div class="max-w-7xl mx-auto relative flex justify-between items-center glass rounded-2xl px-4 py-3 sm:px-6 sm:py-4">
+            <a href="#" data-target="home" class="nav-link interactive font-display font-bold text-xl tracking-tighter">
+                V<span class="text-brand-500">.</span>SUINAN
+            </a>
+            <nav class="hidden lg:flex gap-8 text-sm font-semibold tracking-widest uppercase">
+                <a href="#" data-target="home"
+                    class="nav-link interactive text-brand-500 hover:text-brand-400 transition-colors">Home</a>
+                <a href="#" data-target="work"
+                    class="nav-link interactive text-gray-400 hover:text-white transition-colors">Work</a>
+                <a href="#" data-target="reels"
+                    class="nav-link interactive text-gray-400 hover:text-white transition-colors">Reels</a>
+                <a href="#" data-target="about"
+                    class="nav-link interactive text-gray-400 hover:text-white transition-colors">About</a>
+                <a href="#" data-target="contact"
+                    class="nav-link interactive text-gray-400 hover:text-white transition-colors">Contact</a>
+            </nav>
+            <!-- Mobile Menu Toggle -->
+            <button class="lg:hidden interactive glass rounded-xl border border-white/10 p-2 text-white" id="mobile-menu-btn" aria-controls="mobile-menu" aria-expanded="false" aria-label="Toggle navigation menu">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7">
+                    </path>
+                </svg>
+            </button>
+            <nav id="mobile-menu" class="hidden lg:hidden absolute top-full left-0 right-0 mt-3 glass rounded-2xl p-3 text-sm font-semibold tracking-widest uppercase shadow-2xl shadow-black/40">
+                <a href="#" data-target="home" class="nav-link interactive block rounded-xl px-4 py-3 text-brand-500 hover:bg-white/10 transition-colors">Home</a>
+                <a href="#" data-target="work" class="nav-link interactive block rounded-xl px-4 py-3 text-gray-400 hover:bg-white/10 hover:text-white transition-colors">Work</a>
+                <a href="#" data-target="reels" class="nav-link interactive block rounded-xl px-4 py-3 text-gray-400 hover:bg-white/10 hover:text-white transition-colors">Reels</a>
+                <a href="#" data-target="about" class="nav-link interactive block rounded-xl px-4 py-3 text-gray-400 hover:bg-white/10 hover:text-white transition-colors">About</a>
+                <a href="#" data-target="contact" class="nav-link interactive block rounded-xl px-4 py-3 text-gray-400 hover:bg-white/10 hover:text-white transition-colors">Contact</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content" class="relative w-full min-h-screen">
+
+        <!-- ================= HOME PAGE ================= -->
+        <!-- Added .active class by default so it displays immediately -->
+        <section id="home" class="page-section active flex items-center justify-center min-h-screen -mt-[120px] pt-0">
+            <div class="container mx-auto px-6 relative z-10 flex flex-col items-center justify-center text-center">
+                <p
+                    class="uppercase tracking-[0.4em] text-brand-400 text-sm md:text-md mb-6 font-semibold animate-pulse">
+                    Visionary Creative</p>
+                <h1
+                    class="font-display font-bold text-4xl sm:text-6xl md:text-8xl lg:text-[9rem] leading-[0.9] tracking-tighter uppercase flex flex-col items-center">
+                    <span class="interactive cursor-default">Graphic Artist</span>
+                    <span class="text-outline interactive cursor-default">& Editor</span>
+                </h1>
+                <p class="max-w-2xl mx-auto text-gray-400 mt-8 text-lg md:text-xl font-light">
+                    Blending hyper-realistic CGI, dynamic motion graphics, and cinematic video editing to craft
+                    immersive digital experiences.
+                </p>
+                <div class="flex flex-wrap justify-center gap-6 mt-12">
+                    <button data-target="work"
+                        class="nav-link interactive px-8 py-4 font-bold text-white bg-gradient-to-r from-brand-600 to-brand-400 rounded-full hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] transition-all transform hover:-translate-y-1">
+                        Explore Gallery
+                    </button>
+                    <button data-target="reels"
+                        class="nav-link interactive px-8 py-4 font-bold text-white glass rounded-full hover:bg-white/10 transition-all">
+                        Watch Showreel
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= WORK PAGE ================= -->
+        <section id="work" class="page-section">
+            <div class="container mx-auto px-6 max-w-7xl">
+                <div class="mb-12">
+                    <h2 class="font-display text-5xl md:text-7xl font-bold">Selected <span
+                            class="text-brand-500">Projects.</span></h2>
+                </div>
+
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-3 mb-12" id="filters-container">
+                    <!-- Filters dynamically generated by JS -->
+                </div>
+
+                <!-- Gallery Grid -->
+                <div id="work-gallery" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= REELS PAGE ================= -->
+        <section id="reels" class="page-section">
+            <div class="container mx-auto px-6 max-w-7xl">
+                <div class="text-center mb-16">
+                    <h2 class="font-display text-5xl md:text-7xl font-bold mb-4">Video <span
+                            class="text-brand-500">Reels</span>.</h2>
+                    <p class="text-gray-400">Cinematic cuts, VFX breakdowns, and motion graphics composites.</p>
+                </div>
+                <div id="reels-gallery" class="grid grid-cols-1 gap-12">
+                    <!-- Reel items injected by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= ABOUT PAGE ================= -->
+        <section id="about" class="page-section">
+            <div class="container mx-auto px-6 max-w-6xl">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+                    <div class="relative group">
+                        <div class="aspect-[4/5] rounded-3xl overflow-hidden glass p-2">
+                            <!-- Placeholder image -->
+                            <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
+                                alt="Abstract 3D Art"
+                                class="w-full h-full object-cover rounded-2xl grayscale group-hover:grayscale-0 transition-all duration-700">
+                        </div>
+                        <div
+                            class="absolute -z-10 top-8 -right-8 w-full h-full border-2 border-brand-500/30 rounded-3xl">
+                        </div>
+                    </div>
+                    <div class="space-y-8">
+                        <h2 class="font-display text-4xl sm:text-5xl font-bold">The <span class="text-brand-500">Architect</span>.
+                        </h2>
+                        <p class="text-gray-300 text-lg leading-relaxed">
+                            I am a digital artist obsessed with the intersection of technology and storytelling. From
+                            building expansive 3D worlds in Unreal Engine to meticulously color grading footage in
+                            DaVinci Resolve, I handle every pixel with purpose.
+                        </p>
+                        <div>
+                            <h3 class="text-sm font-bold tracking-widest uppercase text-brand-500 mb-4">Toolkit</h3>
+                            <div class="flex flex-wrap gap-3">
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">Blender / C4D</span>
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">Unreal Engine 5</span>
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">After Effects</span>
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">Premiere Pro</span>
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">ZBrush</span>
+                                <span class="glass px-4 py-2 rounded-lg text-sm text-gray-300">Substance Painter</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= CONTACT PAGE ================= -->
+        <section id="contact" class="page-section">
+            <div class="container mx-auto px-6 max-w-3xl text-center">
+                <h2 class="font-display text-5xl md:text-7xl font-bold mb-6">Let's <span
+                        class="text-brand-500">Create</span>.</h2>
+                <p class="text-gray-400 text-lg mb-12">Open for freelance projects, studio collaborations, and pushing
+                    boundaries.</p>
+
+                <form class="space-y-6 glass p-8 md:p-12 rounded-3xl text-left"
+                    onsubmit="event.preventDefault(); alert('Transmission Sent!');">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div>
+                            <label
+                                class="block text-xs font-bold tracking-widest uppercase text-gray-500 mb-2">Name</label>
+                            <input type="text"
+                                class="interactive w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-brand-500 transition-colors"
+                                required>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold tracking-widest uppercase text-gray-500 mb-2">Email</label>
+                            <input type="email"
+                                class="interactive w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-brand-500 transition-colors"
+                                required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold tracking-widest uppercase text-gray-500 mb-2">Project
+                            Details</label>
+                        <textarea
+                            class="interactive w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-brand-500 transition-colors h-32 resize-none"
+                            required></textarea>
+                    </div>
+                    <button type="submit"
+                        class="interactive w-full py-4 bg-white text-black font-bold uppercase tracking-widest hover:bg-brand-500 hover:text-white transition-all rounded-xl mt-4">
+                        Send Message
+                    </button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <div id="lightbox"
+        class="fixed inset-0 bg-[#030303]/95 z-[100] flex flex-col items-center justify-center backdrop-blur-xl">
+        <button id="close-lightbox"
+            class="interactive absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+        <div class="lightbox-scale w-full max-w-6xl p-4 flex flex-col items-center">
+            <div id="lightbox-media"
+                class="w-full max-h-[75vh] flex justify-center bg-black/50 rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-brand-500/20">
+                <!-- Media Injected Here -->
+            </div>
+            <div class="mt-6 text-center">
+                <h3 id="lightbox-title" class="text-2xl font-display font-bold text-white mb-1"></h3>
+                <p id="lightbox-desc" class="text-gray-400"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // ==========================================
+            // 1. DATA CONFIGURATION (GOOGLE DRIVE)
+            // ==========================================
+            /* 
+               Instructions to use your Drive files:
+               1. Share file -> "Anyone with the link can view".
+               2. Copy the ID from the link (e.g., https://drive.google.com/file/d/YOUR_ID/view).
+               3. Paste 'YOUR_ID' below.
+            */
+            const portfolioMedia = [
+                {
+                    id: '1UiFlFEEv7nLvqGzpAYgHJPdjsHQNgSw3',
+                    fallbackUrl: 'https://drive.google.com/thumbnail?id=1UiFlFEEv7nLvqGzpAYgHJPdjsHQNgSw3&sz=w1600',
+                    type: 'image',
+                    section: 'work',
+                    categories: ['3D Model', 'Digital Art'],
+                    title: 'Cybernetic Skull',
+                    desc: 'ZBrush sculpt rendered in Octane.'
+                },
+                {
+                    id: '1_INVALID_ID_PLACEHOLDER_2',
+                    fallbackUrl: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?q=80&w=2535&auto=format&fit=crop',
+                    type: 'image',
+                    section: 'work',
+                    categories: ['Posters', 'Social Media'],
+                    title: 'Neon Genesis Event',
+                    desc: 'Promotional poster design utilizing C4D.'
+                },
+                {
+                    id: '1h7C5uyBoMQ-EmyDqRethuscpd6JC-RyD',
+                    mediaUrl: 'https://drive.google.com/uc?export=media&id=1h7C5uyBoMQ-EmyDqRethuscpd6JC-RyD',
+                    driveUrl: 'https://drive.google.com/file/d/1h7C5uyBoMQ-EmyDqRethuscpd6JC-RyD/preview',
+                    fallbackUrl: 'https://drive.google.com/thumbnail?id=1h7C5uyBoMQ-EmyDqRethuscpd6JC-RyD&sz=w1600',
+                    type: 'video',
+                    section: 'work',
+                    categories: ['3D Animation', 'Video Edit'],
+                    title: 'Data Flow Simulation',
+                    desc: 'X-Particles simulation for a tech brand.'
+                },
+                {
+                    id: '1bPJjWnMdnQdshv7U-UlUw2o31Sw6Kqds',
+                    mediaUrl: 'https://drive.usercontent.google.com/download?id=1bPJjWnMdnQdshv7U-UlUw2o31Sw6Kqds&export=download&confirm=t',
+                    type: 'video',
+                    section: 'reels',
+                    categories: [],
+                    title: 'Showreel 2026',
+                    desc: 'A compilation of my best CGI and Editing work.'
+                }
+            ];
+
+            // Categories available for filtering
+            const categories = ['All', 'Social Media', 'Posters', '3D Animation', '3D Model', 'Video Edit', 'Digital Art'];
+
+            // Prefer a local or hosted media URL, then use the demo fallback.
+            function getMediaUrl(item) {
+                return item.localUrl || item.mediaUrl || item.fallbackUrl || `https://drive.google.com/uc?export=${item.type === 'video' ? 'download' : 'view'}&id=${item.id}`;
+            }
+
+            // ==========================================
+            // 2. RENDER GALLERIES & FILTERS
+            // ==========================================
+            const workGallery = document.getElementById('work-gallery');
+            const reelsGallery = document.getElementById('reels-gallery');
+            const filtersContainer = document.getElementById('filters-container');
+
+            // Render Filters
+            categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = `filter-btn interactive glass px-5 py-2 rounded-full text-xs font-bold tracking-widest uppercase transition-all ${cat === 'All' ? 'bg-brand-500/20 text-white border-brand-500' : 'text-gray-400 border-transparent hover:border-brand-500 hover:text-white'}`;
+                btn.dataset.filter = cat.toLowerCase();
+                btn.textContent = cat;
+                filtersContainer.appendChild(btn);
+            });
+
+            // Render Media
+            portfolioMedia.forEach(item => {
+                const url = getMediaUrl(item);
+                const itemCats = item.categories.map(c => c.toLowerCase()).join(',');
+
+                if (item.section === 'work') {
+                    const card = document.createElement('div');
+                    card.className = 'gallery-item interactive tilt-card group relative h-[400px] rounded-3xl overflow-hidden cursor-pointer transition-opacity duration-300';
+                    card.dataset.type = item.type;
+                    card.dataset.src = url;
+                    card.dataset.fallbackSrc = item.driveUrl || '';
+                    card.dataset.title = item.title;
+                    card.dataset.desc = item.desc;
+                    card.dataset.categories = itemCats;
+
+                    // Use thumbnail image for drive-video to prevent broken elements on the grid
+                    let mediaHtml = (item.type === 'image' || item.type === 'drive-video')
+                        ? `<img src="${item.fallbackUrl || url}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 pointer-events-none" alt="${item.title}">`
+                        : `<video src="${url}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 pointer-events-none"></video>`;
+
+                    let badgeHtml = (item.type === 'video' || item.type === 'drive-video')
+                        ? `<div class="absolute top-6 right-6 z-20 glass px-3 py-1 rounded-full text-[10px] font-bold uppercase text-white tracking-widest flex items-center gap-2"><div class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>Video</div>`
+                        : '';
+
+                    card.innerHTML = `
+        ${mediaHtml}
+        <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none"></div>
+        ${badgeHtml}
+        <div class="absolute bottom-0 left-0 p-8 w-full tilt-card-content pointer-events-none">
+            <h3 class="font-display text-2xl font-bold text-white mb-2">${item.title}</h3>
+            <div class="flex flex-wrap gap-2">
+                ${item.categories.map(c => `<span class="text-xs font-bold text-brand-400 tracking-wider uppercase">${c}</span>`).join('')}
+            </div>
+        </div>
+    `;
+                    workGallery.appendChild(card);
+                }
+                else if (item.section === 'reels') {
+                    const card = document.createElement('div');
+                    card.className = 'gallery-item interactive relative w-full aspect-video rounded-3xl overflow-hidden group cursor-pointer glass p-2 border-white/10 hover:border-brand-500/50 transition-colors';
+                    const isDriveLink = Boolean(item.driveUrl);
+                    card.dataset.type = isDriveLink ? 'drive-video' : 'video';
+                    card.dataset.src = isDriveLink ? item.driveUrl : url;
+                    card.dataset.title = item.title;
+                    card.dataset.desc = item.desc;
+
+                    const reelMedia = isDriveLink
+                        ? `<div class="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-gradient-to-br from-brand-600/30 to-black p-8 text-center pointer-events-none"><div class="w-20 h-20 rounded-full glass border border-white/20 flex items-center justify-center"><svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div><p class="text-sm uppercase tracking-widest text-gray-300">Open video in Google Drive</p></div>`
+                        : `<video src="${url}" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-700 pointer-events-none"></video>`;
+
+                    card.innerHTML = `
+                        <div class="relative w-full h-full rounded-2xl overflow-hidden">
+                            ${reelMedia}
+                            <div class="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/10 transition-colors pointer-events-none">
+                                <div class="w-20 h-20 rounded-full glass border border-white/20 flex items-center justify-center group-hover:scale-110 group-hover:border-brand-500 transition-all">
+                                    <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                            </div>
+                            <div class="absolute bottom-8 left-8 pointer-events-none">
+                                <h3 class="font-display text-4xl font-bold text-white">${item.title}</h3>
+                            </div>
+                        </div>
+                    `;
+                    reelsGallery.appendChild(card);
+                }
+            });
+
+            // ==========================================
+            // 3. INTERACTIVE LOGIC (SPA, FILTERS, TILT)
+            // ==========================================
+
+            // Filter Logic
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Update Active Button styling
+                    filterBtns.forEach(b => {
+                        b.classList.remove('bg-brand-500/20', 'text-white', 'border-brand-500');
+                        b.classList.add('text-gray-400', 'border-transparent');
+                    });
+                    btn.classList.add('bg-brand-500/20', 'text-white', 'border-brand-500');
+                    btn.classList.remove('text-gray-400', 'border-transparent');
+
+                    const filter = btn.dataset.filter;
+                    const items = workGallery.querySelectorAll('.gallery-item');
+
+                    items.forEach(item => {
+                        item.style.opacity = '0';
+                        setTimeout(() => {
+                            if (filter === 'all' || item.dataset.categories.includes(filter)) {
+                                item.style.display = 'block';
+                                setTimeout(() => item.style.opacity = '1', 20);
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        }, 300);
+                    });
+                });
+            });
+
+            // SPA Navigation
+            const navLinks = document.querySelectorAll('.nav-link');
+            const sections = document.querySelectorAll('.page-section');
+            const mobileMenuButton = document.getElementById('mobile-menu-btn');
+            const mobileMenu = document.getElementById('mobile-menu');
+
+            function closeMobileMenu() {
+                mobileMenu.classList.add('hidden');
+                mobileMenuButton.setAttribute('aria-expanded', 'false');
+            }
+
+            mobileMenuButton.addEventListener('click', () => {
+                const isOpen = !mobileMenu.classList.toggle('hidden');
+                mobileMenuButton.setAttribute('aria-expanded', String(isOpen));
+            });
+
+            function navigateTo(targetId) {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                closeMobileMenu();
+
+                // Update Nav Colors
+                document.querySelectorAll('nav .nav-link').forEach(link => {
+                    if (link.dataset.target === targetId) {
+                        link.classList.remove('text-gray-400');
+                        link.classList.add('text-brand-500');
+                    } else {
+                        link.classList.remove('text-brand-500');
+                        link.classList.add('text-gray-400');
+                    }
+                });
+
+                sections.forEach(sec => {
+                    if (sec.id === targetId) {
+                        sec.classList.add('active');
+                    } else {
+                        sec.classList.remove('active');
+                    }
+                });
+            }
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    navigateTo(link.dataset.target);
+                });
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!mobileMenu.contains(e.target) && !mobileMenuButton.contains(e.target)) {
+                    closeMobileMenu();
+                }
+            });
+
+            // 3D Tilt Effect
+            const tiltCards = document.querySelectorAll('.tilt-card');
+            tiltCards.forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const cx = rect.width / 2;
+                    const cy = rect.height / 2;
+
+                    const rotX = ((y - cy) / cy) * -12;
+                    const rotY = ((x - cx) / cx) * 12;
+
+                    card.style.transform = `perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.02, 1.02, 1.02)`;
+                });
+
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+                });
+            });
+
+            // ==========================================
+            // 4. LIGHTBOX & CURSOR
+            // ==========================================
+            const lightbox = document.getElementById('lightbox');
+            const lightboxMedia = document.getElementById('lightbox-media');
+            const lightboxTitle = document.getElementById('lightbox-title');
+            const lightboxDesc = document.getElementById('lightbox-desc');
+            const closeLightboxBtn = document.getElementById('close-lightbox');
+
+            function openLightbox(item) {
+                lightboxMedia.innerHTML = ''; // clear previous
+                const src = item.dataset.src;
+                const type = item.dataset.type;
+
+                if (type === 'image') {
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.className = 'w-full h-auto max-h-[75vh] object-contain';
+                    lightboxMedia.appendChild(img);
+                } else if (type === 'drive-video') {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = src.includes('?') ? `${src}&autoplay=1` : `${src}?autoplay=1`;
+                    iframe.className = 'border-0 rounded-2xl bg-black shadow-2xl';
+                    iframe.allow = 'autoplay; fullscreen';
+                    iframe.allowFullscreen = true;
+                    iframe.referrerPolicy = 'no-referrer'; // Add this line
+                    iframe.loading = 'eager';
+                    lightboxMedia.appendChild(iframe);
+                } else if (type === 'video') {
+                    const vid = document.createElement('video');
+                    vid.src = src;
+                    vid.controls = true;
+                    vid.autoplay = true;
+                    vid.muted = true;
+                    vid.playsInline = true;
+                    vid.className = 'rounded-2xl bg-black shadow-2xl';
+                    vid.onerror = () => {
+                        if (item.dataset.fallbackSrc) {
+                            const iframe = document.createElement('iframe');
+                            iframe.src = `${item.dataset.fallbackSrc}?autoplay=1`;
+                            iframe.className = 'border-0 rounded-2xl bg-black shadow-2xl';
+                            iframe.allow = 'autoplay; fullscreen';
+                            iframe.allowFullscreen = true;
+                            iframe.referrerPolicy = 'no-referrer';
+                            lightboxMedia.replaceChildren(iframe);
+                        } else {
+                            vid.outerHTML = '<div class="p-8 text-red-500">Video failed to load. Check Drive link permissions.</div>';
+                        }
+                    };
+                    lightboxMedia.appendChild(vid);
+                    vid.play().catch(() => { });
+                }
+
+                lightboxTitle.textContent = item.dataset.title;
+                lightboxDesc.textContent = item.dataset.desc;
+                lightbox.classList.add('show');
+                document.body.style.overflow = 'hidden'; // stop background scroll
+            }
+
+            function closeLightbox() {
+                lightbox.classList.remove('show');
+                document.body.style.overflow = '';
+                setTimeout(() => { lightboxMedia.innerHTML = ''; }, 400); // clear after fade
+            }
+
+            document.querySelectorAll('.gallery-item').forEach(item => {
+                item.addEventListener('click', () => openLightbox(item));
+            });
+
+            closeLightboxBtn.addEventListener('click', closeLightbox);
+            lightbox.addEventListener('click', (e) => {
+                if (e.target === lightbox) closeLightbox();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closeLightbox();
+            });
+
+            // Custom Cursor Logic
+            const cursor = document.getElementById('cursor');
+            document.addEventListener('mousemove', (e) => {
+                requestAnimationFrame(() => {
+                    cursor.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+                });
+            });
+
+            // Attach hover effect to interactive elements dynamically
+            const interactives = document.querySelectorAll('.interactive, button, a, input, textarea');
+            interactives.forEach(el => {
+                el.addEventListener('mouseenter', () => cursor.classList.add('hovered'));
+                el.addEventListener('mouseleave', () => cursor.classList.remove('hovered'));
+            });
+
+        });
+    </script>
+</body>
+
+</html>

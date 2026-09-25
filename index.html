@@ -3,11 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="0; url=portfolio.html">
     <title>V.SUINAN Portfolio</title>
+    <script>
+        // Check if the protocol is HTTP or HTTPS (online/hosted server)
+        if (window.location.protocol.startsWith('http')) {
+            window.location.replace('portfolio.html');
+        }
+    </script>
 </head>
 <body>
     <p>Opening portfolio...</p>
-    <script>window.location.replace('portfolio.html');</script>
 </body>
 </html>
